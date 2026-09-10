@@ -1,4 +1,4 @@
-const CACHE_NAME = 'camdatam-pwa-v4';
+const CACHE_NAME = 'camdatam-pwa-v5';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -8,7 +8,7 @@ const ASSETS_TO_CACHE = [
   './icon-192.png',
   './icon-512.png',
   'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js',
-  'https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.9.0-release.2/opencv.min.js'
+  'https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.9.0-release.3/dist/opencv.js'
 ];
 
 self.addEventListener('install', (event) => {

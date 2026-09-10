@@ -81,36 +81,69 @@ let mediaStreamTrack = null;
 // Accelerometer tilt state
 let tiltAx = 0, tiltAy = 0;
 
-// Reliable OpenCV Initialization (Avoids race conditions and caching hangs)
-function checkOpenCvReady() {
-    if (typeof cv !== 'undefined' && cv.Mat) {
-        if (!isCvReady) {
-            isCvReady = true;
+// Reliable OpenCV Initialization (Handles Promises, onRuntimeInitialized and pre-loaded Mat)
+function markCvReady(cvInstance) {
+    if (isCvReady) return;
+    if (cvInstance) {
+        window.cv = cvInstance;
+    }
+    if (window.cv && window.cv.Mat) {
+        isCvReady = true;
+        try {
             vision = new VisionCore();
-            const loadingEl = document.getElementById('cvLoading');
-            if (loadingEl) loadingEl.style.display = 'none';
-            console.log("OpenCV.js Ready!");
+        } catch (e) {
+            console.error("Error creating VisionCore:", e);
         }
+        const loadingEl = document.getElementById('cvLoading');
+        if (loadingEl) loadingEl.style.display = 'none';
+        console.log("🚀 OpenCV.js successfully initialized!");
+    }
+}
+
+function checkOpenCvReady() {
+    if (isCvReady) return true;
+    if (typeof cv !== 'undefined' && cv) {
+        // Case A: cv is a Promise (modern modular build like @techstark/opencv-js)
+        if (typeof cv.then === 'function') {
+            cv.then(resolvedCv => {
+                markCvReady(resolvedCv);
+            }).catch(err => console.error("OpenCV Promise error:", err));
+            return false;
+        }
+        // Case B: cv is directly initialized with cv.Mat
+        if (cv.Mat) {
+            markCvReady(cv);
+            return true;
+        }
+    }
+    // Case C: Global Module has Mat
+    if (typeof Module !== 'undefined' && Module && Module.Mat) {
+        markCvReady(Module);
         return true;
     }
     return false;
 }
 
-function onOpenCvReady() {
-    if (checkOpenCvReady()) return;
-    if (typeof cv !== 'undefined') {
-        cv['onRuntimeInitialized'] = () => {
-            checkOpenCvReady();
-        };
-    }
-}
+window.onOpenCvReady = function() {
+    checkOpenCvReady();
+};
 
-// Polling check every 50ms in case script was loaded from disk cache
+// Continuous check until ready
 const cvTimer = setInterval(() => {
-    if (checkOpenCvReady()) {
+    if (checkOpenCvReady() || isCvReady) {
         clearInterval(cvTimer);
     }
 }, 50);
+
+// Timeout safety fallback (12s)
+setTimeout(() => {
+    if (!isCvReady) {
+        const loadingText = document.querySelector('#cvLoading div:last-child');
+        if (loadingText) {
+            loadingText.innerHTML = '<span style="color:#FF5252">Сеть замедлена. Загрузка продолжается...</span><br><button onclick="location.reload()" style="margin-top:8px;padding:6px 14px;background:#00E5FF;border:none;border-radius:8px;font-weight:bold;color:#000;cursor:pointer;">Повторить</button>';
+        }
+    }
+}, 12000);
 
 // 1. Camera Initialization
 async function initCamera() {

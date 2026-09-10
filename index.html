@@ -15,7 +15,14 @@
 
     <!-- Libraries: ZXing & Fast Edge-Cached OpenCV.js -->
     <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.9.0-release.2/opencv.min.js" onload="onOpenCvReady();" type="text/javascript"></script>
+    <script>
+        var Module = {
+            onRuntimeInitialized: function() {
+                if (window.onOpenCvReady) window.onOpenCvReady();
+            }
+        };
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.9.0-release.3/dist/opencv.js" onload="if(window.onOpenCvReady) window.onOpenCvReady();" type="text/javascript"></script>
 
     <style>
         * {
