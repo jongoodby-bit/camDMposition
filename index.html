@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>CamDataM — Инспектор маркировки</title>
+
+    <!-- PWA Meta Tags for iOS Safari & Android -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="CamDataM">
+    <meta name="theme-color" content="#181820">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon-192.png">
+
+    <!-- Libraries: ZXing & OpenCV.js -->
+    <script src="https://unpkg.com/@zxing/library@latest/umd/index.min.js"></script>
+    <script async src="https://docs.opencv.org/4.8.0/opencv.js" onload="onOpenCvReady();" type="text/javascript"></script>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #0A0A0E;
+            color: #FFFFFF;
+        }
+
+        #appContainer {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        /* 1. Camera & Viewport */
+        #cameraViewport {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            background: #000;
+        }
+
+        #video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        #capturedCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: none;
+            z-index: 2;
+        }
+
+        #overlayCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 3;
+            pointer-events: none;
+        }
+
+        /* Hidden processing canvas */
+        #procCanvas {
+            display: none;
+        }
+
+        /* 2. Top Header Bar */
+        #topBar {
+            position: relative;
+            z-index: 10;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: calc(env(safe-area-inset-top, 12px) + 8px) 16px 8px 16px;
+            background: linear-gradient(180deg, rgba(16,16,22,0.88) 0%, rgba(16,16,22,0) 100%);
+        }
+
+        .tool-btn {
+            background: rgba(31, 31, 39, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: #FFF;
+            padding: 8px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .tool-btn:active {
+            transform: scale(0.95);
+            background: rgba(45, 45, 60, 0.95);
+        }
+
+        .tool-btn.active {
+            background: #FF6D00;
+            border-color: #FFA040;
+            color: #FFF;
+        }
+
+        #roiControls {
+            display: flex;
+            align-items: center;
+            background: rgba(31, 31, 39, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 20px;
+            padding: 2px 6px;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+
+        .roi-btn {
+            background: none;
+            border: none;
+            color: #00FF88;
+            font-size: 18px;
+            font-weight: bold;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+
+        #tvRoiScale {
+            font-size: 12px;
+            font-weight: bold;
+            color: #EEE;
+            padding: 0 4px;
+            min-width: 44px;
+            text-align: center;
+        }
+
+        /* 3. Status & Metrics Box */
+        #statusCard {
+            position: relative;
+            z-index: 10;
+            margin: 0 14px 6px 14px;
+            background: rgba(24, 24, 32, 0.92);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 14px;
+            padding: 10px 14px;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+        }
+
+        #tvStatusText {
+            font-size: 13px;
+            font-weight: 800;
+            color: #00FF88;
+            text-align: center;
+            letter-spacing: 0.3px;
+            line-height: 1.3;
+        }
+
+        #metricsGrid {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            margin-top: 8px;
+            padding-top: 6px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            font-size: 11px;
+            color: #BBB;
+        }
+
+        .metric-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+        }
+
+        .metric-val {
+            font-weight: 700;
+            color: #00E5FF;
+            font-size: 12px;
+        }
+
+        /* 4. Bottom Action Bar */
+        #bottomBar {
+            position: relative;
+            z-index: 10;
+            padding: 10px 14px calc(env(safe-area-inset-bottom, 16px) + 8px) 14px;
+            background: linear-gradient(0deg, rgba(16,16,22,0.95) 0%, rgba(16,16,22,0) 100%);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        #mainBtnRow {
+            display: flex;
+            gap: 10px;
+            width: 100%;
+        }
+
+        #btnCapture {
+            flex: 2;
+            height: 52px;
+            background: #00E676;
+            color: #101014;
+            border: none;
+            border-radius: 14px;
+            font-size: 16px;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            cursor: pointer;
+            box-shadow: 0 4px 16px rgba(0, 230, 118, 0.4);
+            transition: all 0.2s ease;
+        }
+
+        #btnCapture:active {
+            transform: scale(0.97);
+        }
+
+        #btnCapture.reset-state {
+            background: #2979FF;
+            color: #FFFFFF;
+            box-shadow: 0 4px 16px rgba(41, 121, 255, 0.4);
+        }
+
+        #btnLeft {
+            flex: 1;
+            height: 52px;
+            background: #252834;
+            color: #FFFFFF;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 14px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        #btnLeft.repeat-state {
+            background: #FF6D00;
+            border-color: #FFA040;
+        }
+
+        #secondaryBtnRow {
+            display: flex;
+            gap: 8px;
+            width: 100%;
+        }
+
+        .sec-btn {
+            flex: 1;
+            height: 38px;
+            background: #1C1E26;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: #DDD;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .sec-btn:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+        }
+
+        .sec-btn.zero-active {
+            background: #FF6D00;
+            color: #FFF;
+            border-color: #FFA040;
+        }
+
+        /* 5. Modals */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0,0,0,0.75);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            z-index: 100;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+
+        .modal-content {
+            background: #181820;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 18px;
+            width: 100%;
+            max-width: 440px;
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 16px;
+            box-shadow: 0 12px 36px rgba(0,0,0,0.7);
+        }
+
+        .modal-title {
+            font-size: 15px;
+            font-weight: 800;
+            text-align: center;
+            color: #00FF88;
+            margin-bottom: 12px;
+        }
+
+        /* Radio view selector */
+        .segmented-control {
+            display: flex;
+            background: #0D0D12;
+            border-radius: 10px;
+            padding: 3px;
+            margin-bottom: 10px;
+        }
+
+        .segment-btn {
+            flex: 1;
+            padding: 6px 0;
+            text-align: center;
+            font-size: 11px;
+            font-weight: 600;
+            color: #AAA;
+            border-radius: 8px;
+            border: none;
+            background: none;
+            cursor: pointer;
+        }
+
+        .segment-btn.active {
+            background: #2A2D3C;
+            color: #00FF88;
+        }
+
+        #manualPreviewCanvas {
+            width: 100%;
+            height: 180px;
+            background: #000;
+            border-radius: 10px;
+            object-fit: contain;
+            display: block;
+            margin-bottom: 10px;
+        }
+
+        .slider-group {
+            margin-bottom: 10px;
+        }
+
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #DDD;
+            margin-bottom: 4px;
+            font-weight: 600;
+        }
+
+        input[type=range] {
+            width: 100%;
+            height: 6px;
+            background: #333;
+            border-radius: 3px;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #00FF88;
+            cursor: pointer;
+        }
+
+        .checkbox-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: #00FF88;
+            font-weight: 700;
+            margin: 10px 0;
+            cursor: pointer;
+        }
+
+        .modal-btn-row {
+            display: flex;
+            gap: 10px;
+            margin-top: 14px;
+        }
+
+        .modal-btn {
+            flex: 1;
+            height: 42px;
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: 700;
+            border: none;
+            cursor: pointer;
+        }
+
+        .btn-cancel {
+            background: #2A2C38;
+            color: #FFF;
+        }
+
+        .btn-apply {
+            background: #00E676;
+            color: #101014;
+        }
+
+        /* Loading Spinner */
+        #cvLoading {
+            position: fixed;
+            top: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.85);
+            border: 1px solid #00FF88;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 11px;
+            color: #00FF88;
+            font-weight: bold;
+            z-index: 200;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="appContainer">
+
+        <!-- OpenCV loading indicator -->
+        <div id="cvLoading">⏳ Инициализация ядра Vision Wasm...</div>
+
+        <!-- 1. Viewport -->
+        <div id="cameraViewport">
+            <video id="video" playsinline autoplay muted></video>
+            <canvas id="capturedCanvas"></canvas>
+            <canvas id="overlayCanvas"></canvas>
+            <canvas id="procCanvas"></canvas>
+        </div>
+
+        <!-- 2. Top Bar -->
+        <div id="topBar">
+            <button id="btnTorch" class="tool-btn">🔦 Фонарик</button>
+            <div id="roiControls">
+                <button id="btnRoiMinus" class="roi-btn">−</button>
+                <span id="tvRoiScale">35%</span>
+                <button id="btnRoiPlus" class="roi-btn">+</button>
+            </div>
+            <button id="btnZoomView" class="tool-btn">🔍 Зум</button>
+        </div>
+
+        <!-- 3. Status & Metrics Card -->
+        <div id="statusCard">
+            <div id="tvStatusText">НАВЕДИТЕ ПРИЦЕЛ НА ПОДЛОЖКУ И НАЖМИТЕ СНИМОК</div>
+            <div id="metricsGrid">
+                <div class="metric-item">
+                    <span>Слева</span>
+                    <span id="mLeft" class="metric-val">—</span>
+                </div>
+                <div class="metric-item">
+                    <span>Справа</span>
+                    <span id="mRight" class="metric-val">—</span>
+                </div>
+                <div class="metric-item">
+                    <span>Сверху</span>
+                    <span id="mTop" class="metric-val">—</span>
+                </div>
+                <div class="metric-item">
+                    <span>Снизу</span>
+                    <span id="mBottom" class="metric-val">—</span>
+                </div>
+                <div class="metric-item">
+                    <span>Код (мм)</span>
+                    <span id="mCodeSize" class="metric-val">—</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. Bottom Controls -->
+        <div id="bottomBar">
+            <div id="mainBtnRow">
+                <button id="btnLeft">⚙ НАСТРОЙКИ</button>
+                <button id="btnCapture">📷 СНИМОК</button>
+            </div>
+            <div id="secondaryBtnRow">
+                <button id="btnManual" class="sec-btn" disabled>🛠 РУЧНАЯ ПОДСТРОЙКА</button>
+                <button id="btnZero" class="sec-btn">🎯 БАЗА (0,0)</button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- 5. Settings Modal -->
+    <div id="settingsModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-title">ПАРАМЕТРЫ СИСТЕМЫ</div>
+            <div class="slider-group">
+                <label class="slider-label">Размер рамки (мм):</label>
+                <select id="selFrameSize" style="width:100%; height:40px; background:#252834; color:#FFF; border-radius:8px; border:1px solid #444; padding:0 8px; font-size:14px;">
+                    <option value="10">10 мм</option>
+                    <option value="12">12 мм</option>
+                    <option value="14">14 мм</option>
+                    <option value="15" selected>15 мм</option>
+                    <option value="16">16 мм</option>
+                    <option value="18">18 мм</option>
+                    <option value="20">20 мм</option>
+                    <option value="25">25 мм</option>
+                    <option value="30">30 мм</option>
+                </select>
+            </div>
+            <div class="modal-btn-row">
+                <button id="btnSaveSettings" class="modal-btn btn-apply">ПРИМЕНИТЬ</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 6. Manual Tuning Modal -->
+    <div id="manualModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-title">РУЧНАЯ ПОДСТРОЙКА</div>
+
+            <div class="segmented-control">
+                <button id="segOverlay" class="segment-btn active">Результат</button>
+                <button id="segMask" class="segment-btn">Маска порога</button>
+                <button id="segWarp" class="segment-btn">Warp 500x500</button>
+            </div>
+
+            <canvas id="manualPreviewCanvas"></canvas>
+
+            <div style="background:#222430; padding:6px; border-radius:8px; font-size:11px; margin-bottom:8px;">
+                <div id="lblLiveX" style="color:#00DDFF; font-weight:bold;">X: Слева: — • Справа: —</div>
+                <div id="lblLiveY" style="color:#DD88FF; font-weight:bold; margin-top:2px;">Y: Сверху: — • Снизу: —</div>
+            </div>
+
+            <div class="slider-group">
+                <div class="slider-label">
+                    <span id="lblThresh">Порог белого: 170</span>
+                    <button id="btnAutoOtsu" style="background:#0066CC; border:none; color:#FFF; padding:2px 8px; border-radius:4px; font-size:10px;">⚡ Авто-Otsu</button>
+                </div>
+                <input type="range" id="rngThresh" min="20" max="245" value="170">
+            </div>
+
+            <div class="slider-group">
+                <div class="slider-label">
+                    <span id="lblBlur">Гаусс: 5</span>
+                </div>
+                <input type="range" id="rngBlur" min="1" max="21" step="2" value="5">
+            </div>
+
+            <div class="slider-group">
+                <div class="slider-label">
+                    <span id="lblMorph">Морфология: 5</span>
+                </div>
+                <input type="range" id="rngMorph" min="1" max="23" step="2" value="5">
+            </div>
+
+            <label class="checkbox-row">
+                <input type="checkbox" id="chkSmart" checked style="width:16px; height:16px;">
+                <span>⚡ Умный поиск (Smart Raycast)</span>
+            </label>
+
+            <div class="modal-btn-row">
+                <button id="btnManualCancel" class="modal-btn btn-cancel">ОТМЕНА</button>
+                <button id="btnManualApply" class="modal-btn btn-apply">ПРИМЕНИТЬ</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 7. Zoom Modal -->
+    <div id="zoomModal" class="modal-overlay">
+        <div class="modal-content" style="max-width:95vw; max-height:95vh; padding:8px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <span style="font-size:13px; font-weight:bold; color:#00FF88;">Детальный просмотр</span>
+                <button id="btnCloseZoom" style="background:#333; color:#FFF; border:none; padding:4px 10px; border-radius:6px; font-weight:bold;">✕</button>
+            </div>
+            <canvas id="zoomCanvas" style="width:100%; height:auto; max-height:80vh; object-fit:contain; background:#000; border-radius:8px;"></canvas>
+        </div>
+    </div>
+
+    <!-- Logic scripts -->
+    <script src="vision.js"></script>
+    <script src="app.js"></script>
+    <script>
+        // Service Worker registration for offline PWA
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js').catch(err => console.log('SW fail:', err));
+            });
+        }
+    </script>
+</body>
+</html>
