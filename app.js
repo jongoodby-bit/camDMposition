@@ -1,6 +1,6 @@
 /**
  * app.js — Главная логика веб-приложения CamDataM
- * Управление камерой iPhone/Android, видоискателем, инспекцией и UI
+ * Управление камерой iPhone/Android, видоискателем, инспекцией, зумом и UI
  */
 
 let vision = null;
@@ -38,6 +38,9 @@ const zoomModal = document.getElementById('zoomModal');
 const selFrameSize = document.getElementById('selFrameSize');
 const btnSaveSettings = document.getElementById('btnSaveSettings');
 const btnCloseZoom = document.getElementById('btnCloseZoom');
+const zoomStatusText = document.getElementById('zoomStatusText');
+const zoomDistX = document.getElementById('zoomDistX');
+const zoomDistY = document.getElementById('zoomDistY');
 
 // Manual tuning sliders
 const rngThresh = document.getElementById('rngThresh');
@@ -78,15 +81,36 @@ let mediaStreamTrack = null;
 // Accelerometer tilt state
 let tiltAx = 0, tiltAy = 0;
 
-function onOpenCvReady() {
-    cv['onRuntimeInitialized'] = () => {
-        isCvReady = true;
-        vision = new VisionCore();
-        const loadingEl = document.getElementById('cvLoading');
-        if (loadingEl) loadingEl.style.display = 'none';
-        console.log("OpenCV.js Ready!");
-    };
+// Reliable OpenCV Initialization (Avoids race conditions and caching hangs)
+function checkOpenCvReady() {
+    if (typeof cv !== 'undefined' && cv.Mat) {
+        if (!isCvReady) {
+            isCvReady = true;
+            vision = new VisionCore();
+            const loadingEl = document.getElementById('cvLoading');
+            if (loadingEl) loadingEl.style.display = 'none';
+            console.log("OpenCV.js Ready!");
+        }
+        return true;
+    }
+    return false;
 }
+
+function onOpenCvReady() {
+    if (checkOpenCvReady()) return;
+    if (typeof cv !== 'undefined') {
+        cv['onRuntimeInitialized'] = () => {
+            checkOpenCvReady();
+        };
+    }
+}
+
+// Polling check every 50ms in case script was loaded from disk cache
+const cvTimer = setInterval(() => {
+    if (checkOpenCvReady()) {
+        clearInterval(cvTimer);
+    }
+}, 50);
 
 // 1. Camera Initialization
 async function initCamera() {
@@ -112,7 +136,7 @@ async function initCamera() {
         resizeCanvases();
         requestAnimationFrame(renderLoop);
     } catch (err) {
-        alert("Не удалось получить доступ к камере: " + err.message);
+        console.log("Camera access error:", err);
     }
 }
 
@@ -135,7 +159,6 @@ async function toggleTorch() {
     }
     const capabilities = mediaStreamTrack.getCapabilities ? mediaStreamTrack.getCapabilities() : {};
     if (!capabilities.torch) {
-        // Fallback for devices without standard torch API
         isTorchOn = !isTorchOn;
         btnTorch.classList.toggle('active', isTorchOn);
         return;
@@ -233,7 +256,7 @@ function drawViewfinderOverlay() {
 // 5. Capture & Analysis
 function captureFrame() {
     if (!isCvReady) {
-        alert("Ядро Vision еще загружается, подождите секунду...");
+        alert("Ядро Vision инициализируется, подождите 1-2 секунды...");
         return;
     }
 
@@ -282,6 +305,7 @@ function resetCapture() {
     isCaptured = false;
     capturedRoiImageData = null;
     lastResult = null;
+    lastWarpCanvas = null;
 
     video.style.display = 'block';
     capturedCanvas.style.display = 'none';
@@ -369,12 +393,59 @@ function displayResults(res, fullCanvas, rx, ry, side, vw, vh) {
         const centerPadY = (minPadY + maxPadY) / 2.0;
 
         if (res.codeBox) {
-            // 2. Draw Code Box
-            // Project 500x500 codeBox back to ROI
-            const codeCenterROI = {
-                x: (res.codeBox[0].x + res.codeBox[1].x + res.codeBox[2].x + res.codeBox[3].x) / 4.0,
-                y: (res.codeBox[0].y + res.codeBox[1].y + res.codeBox[2].y + res.codeBox[3].y) / 4.0
-            };
+            // 2. Project 500x500 codeBox back to ROI & Screen coordinates
+            try {
+                const srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
+                    0, 0,
+                    500 - 1, 0,
+                    500 - 1, 500 - 1,
+                    0, 500 - 1
+                ]);
+                const dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
+                    res.padPts[0].x, res.padPts[0].y,
+                    res.padPts[1].x, res.padPts[1].y,
+                    res.padPts[2].x, res.padPts[2].y,
+                    res.padPts[3].x, res.padPts[3].y
+                ]);
+                const mInv = cv.getPerspectiveTransform(srcTri, dstTri);
+
+                const codeScreen = res.codeBox.map(pt => {
+                    const u = pt.x, v = pt.y;
+                    const m00 = mInv.doubleAt(0, 0), m01 = mInv.doubleAt(0, 1), m02 = mInv.doubleAt(0, 2);
+                    const m10 = mInv.doubleAt(1, 0), m11 = mInv.doubleAt(1, 1), m12 = mInv.doubleAt(1, 2);
+                    const m20 = mInv.doubleAt(2, 0), m21 = mInv.doubleAt(2, 1), m22 = mInv.doubleAt(2, 2);
+                    const w = m20 * u + m21 * v + m22;
+                    const roiX = (m00 * u + m01 * v + m02) / w;
+                    const roiY = (m10 * u + m11 * v + m12) / w;
+                    return {
+                        x: (rx + roiX) * fitScale + offsetX,
+                        y: (ry + roiY) * fitScale + offsetY
+                    };
+                });
+
+                srcTri.delete();
+                dstTri.delete();
+                mInv.delete();
+
+                // Draw Red Code Box (Sharp & High Contrast)
+                cCtx.strokeStyle = '#FF1744';
+                cCtx.lineWidth = 3.5;
+                cCtx.beginPath();
+                cCtx.moveTo(codeScreen[0].x, codeScreen[0].y);
+                for (let i = 1; i < codeScreen.length; i++) cCtx.lineTo(codeScreen[i].x, codeScreen[i].y);
+                cCtx.closePath();
+                cCtx.stroke();
+
+                // Draw center point of code (Red dot)
+                const codeCenterX = (codeScreen[0].x + codeScreen[1].x + codeScreen[2].x + codeScreen[3].x) / 4.0;
+                const codeCenterY = (codeScreen[0].y + codeScreen[1].y + codeScreen[2].y + codeScreen[3].y) / 4.0;
+                cCtx.fillStyle = '#FF1744';
+                cCtx.beginPath();
+                cCtx.arc(codeCenterX, codeCenterY, 5, 0, Math.PI * 2);
+                cCtx.fill();
+            } catch (e) {
+                console.log("Error drawing code box:", e);
+            }
 
             // 3. Draw External Directional Arrows
             const yellowColor = '#FFEA00';
@@ -382,7 +453,7 @@ function displayResults(res, fullCanvas, rx, ry, side, vw, vh) {
             const greenColor = '#00E676';
             const badgeBg = 'rgba(24, 24, 32, 0.9)';
 
-            // X-Axis (Horizontal)
+            // X-Axis (Horizontal - placed ABOVE the frame)
             const arrowSpan = 60;
             const xArrowY = Math.max(35, minPadY - 35);
             if (Math.abs(relDx) >= 0.01) {
@@ -394,7 +465,7 @@ function displayResults(res, fullCanvas, rx, ry, side, vw, vh) {
                 drawBadge(cCtx, 'X: 0.00 мм (ОК)', centerPadX, xArrowY - 10, greenColor, badgeBg);
             }
 
-            // Y-Axis (Vertical)
+            // Y-Axis (Vertical - placed to the RIGHT of the frame)
             const yArrowX = Math.min(cw - 40, maxPadX + 35);
             if (Math.abs(relDy) >= 0.01) {
                 const startY = relDy > 0 ? centerPadY + arrowSpan : centerPadY - arrowSpan;
@@ -601,15 +672,27 @@ btnRoiMinus.addEventListener('click', () => {
     }
 });
 
+// Detail Zoom Modal (Warp 500x500 Analysis)
 btnZoomView.addEventListener('click', () => {
-    if (lastWarpCanvas) {
+    if (lastWarpCanvas && lastResult) {
         zoomCanvas.width = 500;
         zoomCanvas.height = 500;
         const zCtx = zoomCanvas.getContext('2d');
         zCtx.drawImage(lastWarpCanvas, 0, 0);
+
+        const relDx = lastResult.dxMm - zeroOffsetX;
+        const relDy = lastResult.dyMm - zeroOffsetY;
+
+        const xRec = Math.abs(relDx) < 0.01 ? "0.00мм" : (relDx > 0 ? `ВЛЕВО ${Math.abs(relDx).toFixed(2)}мм` : `ВПРАВО ${Math.abs(relDx).toFixed(2)}мм`);
+        const yRec = Math.abs(relDy) < 0.01 ? "0.00мм" : (relDy > 0 ? `ВВЕРХ ${Math.abs(relDy).toFixed(2)}мм` : `ВНИЗ ${Math.abs(relDy).toFixed(2)}мм`);
+
+        zoomStatusText.innerText = `ОСЬ X: ${xRec}  |  ОСЬ Y: ${yRec}`;
+        zoomDistX.innerText = `X: Слева: ${lastResult.distLeftMm.toFixed(2)} мм • Справа: ${lastResult.distRightMm.toFixed(2)} мм`;
+        zoomDistY.innerText = `Y: Сверху: ${lastResult.distTopMm.toFixed(2)} мм • Снизу: ${lastResult.distBottomMm.toFixed(2)} мм`;
+
         zoomModal.style.display = 'flex';
     } else {
-        alert("Сначала сделайте снимок для просмотра зума!");
+        alert("Сначала сделайте снимок, чтобы открыть детальный зум!");
     }
 });
 

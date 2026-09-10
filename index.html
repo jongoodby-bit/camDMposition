@@ -13,9 +13,9 @@
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icon-192.png">
 
-    <!-- Libraries: ZXing & OpenCV.js -->
-    <script src="https://unpkg.com/@zxing/library@latest/umd/index.min.js"></script>
-    <script async src="https://docs.opencv.org/4.8.0/opencv.js" onload="onOpenCvReady();" type="text/javascript"></script>
+    <!-- Libraries: ZXing & Fast Edge-Cached OpenCV.js -->
+    <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.9.0-release.2/opencv.min.js" onload="onOpenCvReady();" type="text/javascript"></script>
 
     <style>
         * {
@@ -84,7 +84,6 @@
             pointer-events: none;
         }
 
-        /* Hidden processing canvas */
         #procCanvas {
             display: none;
         }
@@ -97,7 +96,7 @@
             justify-content: space-between;
             align-items: center;
             padding: calc(env(safe-area-inset-top, 12px) + 8px) 16px 8px 16px;
-            background: linear-gradient(180deg, rgba(16,16,22,0.88) 0%, rgba(16,16,22,0) 100%);
+            background: linear-gradient(180deg, rgba(16,16,22,0.85) 0%, rgba(16,16,22,0) 100%);
         }
 
         .tool-btn {
@@ -162,22 +161,29 @@
             text-align: center;
         }
 
-        /* 3. Status & Metrics Box */
-        #statusCard {
+        /* 3. Bottom Action Bar with Status Card */
+        #bottomBar {
             position: relative;
             z-index: 10;
-            margin: 0 14px 6px 14px;
-            background: rgba(24, 24, 32, 0.92);
-            border: 1px solid rgba(255, 255, 255, 0.12);
+            padding: 8px 14px calc(env(safe-area-inset-bottom, 16px) + 8px) 14px;
+            background: linear-gradient(0deg, rgba(16,16,22,0.95) 0%, rgba(16,16,22,0.8) 70%, rgba(16,16,22,0) 100%);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        #statusCard {
+            background: rgba(24, 24, 32, 0.94);
+            border: 1px solid rgba(255, 255, 255, 0.14);
             border-radius: 14px;
-            padding: 10px 14px;
+            padding: 8px 12px;
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
-            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.6);
         }
 
         #tvStatusText {
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 800;
             color: #00FF88;
             text-align: center;
@@ -189,10 +195,10 @@
             display: flex;
             justify-content: space-around;
             align-items: center;
-            margin-top: 8px;
-            padding-top: 6px;
+            margin-top: 6px;
+            padding-top: 5px;
             border-top: 1px solid rgba(255, 255, 255, 0.08);
-            font-size: 11px;
+            font-size: 10.5px;
             color: #BBB;
         }
 
@@ -200,24 +206,13 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 2px;
+            gap: 1px;
         }
 
         .metric-val {
             font-weight: 700;
             color: #00E5FF;
-            font-size: 12px;
-        }
-
-        /* 4. Bottom Action Bar */
-        #bottomBar {
-            position: relative;
-            z-index: 10;
-            padding: 10px 14px calc(env(safe-area-inset-bottom, 16px) + 8px) 14px;
-            background: linear-gradient(0deg, rgba(16,16,22,0.95) 0%, rgba(16,16,22,0) 100%);
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
+            font-size: 11.5px;
         }
 
         #mainBtnRow {
@@ -228,12 +223,12 @@
 
         #btnCapture {
             flex: 2;
-            height: 52px;
+            height: 50px;
             background: #00E676;
             color: #101014;
             border: none;
             border-radius: 14px;
-            font-size: 16px;
+            font-size: 15px;
             font-weight: 800;
             display: flex;
             align-items: center;
@@ -256,7 +251,7 @@
 
         #btnLeft {
             flex: 1;
-            height: 52px;
+            height: 50px;
             background: #252834;
             color: #FFFFFF;
             border: 1px solid rgba(255, 255, 255, 0.15);
@@ -279,7 +274,7 @@
 
         .sec-btn {
             flex: 1;
-            height: 38px;
+            height: 36px;
             background: #1C1E26;
             border: 1px solid rgba(255, 255, 255, 0.12);
             color: #DDD;
@@ -307,9 +302,9 @@
             left: 0;
             width: 100vw;
             height: 100vh;
-            background: rgba(0,0,0,0.75);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
+            background: rgba(0,0,0,0.80);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
             z-index: 100;
             display: none;
             align-items: center;
@@ -337,7 +332,6 @@
             margin-bottom: 12px;
         }
 
-        /* Radio view selector */
         .segmented-control {
             display: flex;
             background: #0D0D12;
@@ -448,7 +442,7 @@
             top: 16px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(0,0,0,0.85);
+            background: rgba(0,0,0,0.88);
             border: 1px solid #00FF88;
             padding: 6px 14px;
             border-radius: 20px;
@@ -459,6 +453,7 @@
             display: flex;
             align-items: center;
             gap: 6px;
+            box-shadow: 0 4px 12px rgba(0,255,136,0.3);
         }
     </style>
 </head>
@@ -488,35 +483,34 @@
             <button id="btnZoomView" class="tool-btn">🔍 Зум</button>
         </div>
 
-        <!-- 3. Status & Metrics Card -->
-        <div id="statusCard">
-            <div id="tvStatusText">НАВЕДИТЕ ПРИЦЕЛ НА ПОДЛОЖКУ И НАЖМИТЕ СНИМОК</div>
-            <div id="metricsGrid">
-                <div class="metric-item">
-                    <span>Слева</span>
-                    <span id="mLeft" class="metric-val">—</span>
-                </div>
-                <div class="metric-item">
-                    <span>Справа</span>
-                    <span id="mRight" class="metric-val">—</span>
-                </div>
-                <div class="metric-item">
-                    <span>Сверху</span>
-                    <span id="mTop" class="metric-val">—</span>
-                </div>
-                <div class="metric-item">
-                    <span>Снизу</span>
-                    <span id="mBottom" class="metric-val">—</span>
-                </div>
-                <div class="metric-item">
-                    <span>Код (мм)</span>
-                    <span id="mCodeSize" class="metric-val">—</span>
+        <!-- 3. Bottom Controls (Includes Status Card at the bottom) -->
+        <div id="bottomBar">
+            <div id="statusCard">
+                <div id="tvStatusText">НАВЕДИТЕ ПРИЦЕЛ НА ПОДЛОЖКУ И НАЖМИТЕ СНИМОК</div>
+                <div id="metricsGrid">
+                    <div class="metric-item">
+                        <span>Слева</span>
+                        <span id="mLeft" class="metric-val">—</span>
+                    </div>
+                    <div class="metric-item">
+                        <span>Справа</span>
+                        <span id="mRight" class="metric-val">—</span>
+                    </div>
+                    <div class="metric-item">
+                        <span>Сверху</span>
+                        <span id="mTop" class="metric-val">—</span>
+                    </div>
+                    <div class="metric-item">
+                        <span>Снизу</span>
+                        <span id="mBottom" class="metric-val">—</span>
+                    </div>
+                    <div class="metric-item">
+                        <span>Код (мм)</span>
+                        <span id="mCodeSize" class="metric-val">—</span>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <!-- 4. Bottom Controls -->
-        <div id="bottomBar">
             <div id="mainBtnRow">
                 <button id="btnLeft">⚙ НАСТРОЙКИ</button>
                 <button id="btnCapture">📷 СНИМОК</button>
@@ -605,14 +599,26 @@
         </div>
     </div>
 
-    <!-- 7. Zoom Modal -->
+    <!-- 7. Detail Zoom Modal (Warp 500x500 Analysis) -->
     <div id="zoomModal" class="modal-overlay">
-        <div class="modal-content" style="max-width:95vw; max-height:95vh; padding:8px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                <span style="font-size:13px; font-weight:bold; color:#00FF88;">Детальный просмотр</span>
-                <button id="btnCloseZoom" style="background:#333; color:#FFF; border:none; padding:4px 10px; border-radius:6px; font-weight:bold;">✕</button>
+        <div class="modal-content" style="max-width:92vw; max-height:92vh; padding:12px; background:#14141C;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <div>
+                    <span style="font-size:14px; font-weight:bold; color:#00FF88;">🔍 Выровненная подложка (Warp 500×500)</span>
+                    <div style="font-size:11px; color:#AAA; margin-top:2px;">Зеленый прицел — центр поля, Синий — центр кода</div>
+                </div>
+                <button id="btnCloseZoom" style="background:#2A2D3C; color:#FFF; border:1px solid #444; width:32px; height:32px; border-radius:50%; font-weight:bold; cursor:pointer;">✕</button>
             </div>
-            <canvas id="zoomCanvas" style="width:100%; height:auto; max-height:80vh; object-fit:contain; background:#000; border-radius:8px;"></canvas>
+            
+            <canvas id="zoomCanvas" style="width:100%; height:auto; aspect-ratio:1/1; max-height:55vh; object-fit:contain; background:#000; border-radius:10px; border:1px solid #333; display:block; margin:0 auto;"></canvas>
+
+            <div style="background:#20222E; border-radius:10px; padding:8px 10px; margin-top:8px; font-size:11px;">
+                <div id="zoomStatusText" style="color:#00FF88; font-weight:bold; text-align:center; font-size:12px; margin-bottom:4px;">—</div>
+                <div style="display:flex; justify-content:space-between; color:#00E5FF; font-weight:600;">
+                    <span id="zoomDistX">X: Слева: — • Справа: —</span>
+                    <span id="zoomDistY">Y: Сверху: — • Снизу: —</span>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -620,7 +626,6 @@
     <script src="vision.js"></script>
     <script src="app.js"></script>
     <script>
-        // Service Worker registration for offline PWA
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('sw.js').catch(err => console.log('SW fail:', err));

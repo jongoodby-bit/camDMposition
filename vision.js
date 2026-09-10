@@ -652,10 +652,10 @@ class VisionCore {
         dstTri.delete();
         M.delete();
         grayMat.delete();
+        warpedRgba.delete();
+        warpedGray.delete();
 
         if (!refined) {
-            warpedRgba.delete();
-            warpedGray.delete();
             return {
                 isSuccess: true,
                 padPts: bestField,
@@ -698,8 +698,46 @@ class VisionCore {
         const dx = (validCodeCenter.x - (this.WARP_SIZE / 2.0)) / pxPerMm;
         const dy = (validCodeCenter.y - (this.WARP_SIZE / 2.0)) / pxPerMm;
 
-        warpedRgba.delete();
-        warpedGray.delete();
+        // 7. Отрисовка векторных ориентиров прямо на Warp Canvas (для детального просмотра Зума)
+        const wCtx = warpCanvas.getContext('2d');
+
+        // А. Коробка кода (Cyan)
+        wCtx.strokeStyle = '#00E5FF';
+        wCtx.lineWidth = 3;
+        wCtx.beginPath();
+        wCtx.moveTo(validCodeBox[0].x, validCodeBox[0].y);
+        for (let i = 1; i < validCodeBox.length; i++) wCtx.lineTo(validCodeBox[i].x, validCodeBox[i].y);
+        wCtx.closePath();
+        wCtx.stroke();
+
+        // Б. Зеленый прицел-цель в центре подложки (250, 250)
+        const centerPad = this.WARP_SIZE / 2.0;
+        wCtx.strokeStyle = '#00FF88';
+        wCtx.lineWidth = 2;
+        wCtx.beginPath();
+        wCtx.moveTo(centerPad - 24, centerPad); wCtx.lineTo(centerPad + 24, centerPad);
+        wCtx.moveTo(centerPad, centerPad - 24); wCtx.lineTo(centerPad, centerPad + 24);
+        wCtx.stroke();
+        wCtx.beginPath();
+        wCtx.arc(centerPad, centerPad, 10, 0, Math.PI * 2);
+        wCtx.stroke();
+
+        // В. Центр кода (Синий кружок)
+        wCtx.fillStyle = '#0066FF';
+        wCtx.strokeStyle = '#FFFFFF';
+        wCtx.lineWidth = 1.5;
+        wCtx.beginPath();
+        wCtx.arc(validCodeCenter.x, validCodeCenter.y, 6, 0, Math.PI * 2);
+        wCtx.fill();
+        wCtx.stroke();
+
+        // Г. Линия ошибки смещения (Желтая стрелка от центра подложки к центру кода)
+        wCtx.strokeStyle = '#FFEA00';
+        wCtx.lineWidth = 2.5;
+        wCtx.beginPath();
+        wCtx.moveTo(centerPad, centerPad);
+        wCtx.lineTo(validCodeCenter.x, validCodeCenter.y);
+        wCtx.stroke();
 
         const xStr = Math.abs(dx) < 0.01 ? "0.00мм" : (dx > 0 ? `ВЛЕВО ${Math.abs(dx).toFixed(2)}мм` : `ВПРАВО ${Math.abs(dx).toFixed(2)}мм`);
         const yStr = Math.abs(dy) < 0.01 ? "0.00мм" : (dy > 0 ? `ВВЕРХ ${Math.abs(dy).toFixed(2)}мм` : `ВНИЗ ${Math.abs(dy).toFixed(2)}мм`);
