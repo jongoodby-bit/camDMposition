@@ -13,17 +13,85 @@
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icon-192.png">
 
-    <!-- Libraries: ZXing & Standalone Official OpenCV.js -->
+    <!-- Libraries: ZXing & Progressive Standalone OpenCV.js -->
     <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
     <script>
         var Module = {
             onRuntimeInitialized: function() {
                 console.log("OpenCV Wasm Runtime Initialized!");
+                window.__cvReady = true;
                 if (window.onOpenCvReady) window.onOpenCvReady();
             }
         };
+
+        function updateCvStatus(text) {
+            const el = document.getElementById('cvLoading');
+            if (el) el.innerHTML = text;
+        }
+
+        // Progressive loader for OpenCV.js with real-time download feedback
+        (function loadOpenCv() {
+            const OPENCV_URL = 'https://docs.opencv.org/4.8.0/opencv.js';
+            
+            function injectDirectScript() {
+                updateCvStatus('⏳ Прямое подключение к CDN OpenCV...');
+                const script = document.createElement('script');
+                script.async = true;
+                script.type = 'text/javascript';
+                script.src = OPENCV_URL;
+                script.onload = function() {
+                    if (window.onOpenCvReady) window.onOpenCvReady();
+                };
+                script.onerror = function() {
+                    updateCvStatus('<span style="color:#FF5252">Ошибка сети.</span> <button onclick="location.reload()" style="margin-left:6px;padding:2px 8px;background:#00E5FF;border:none;border-radius:8px;font-weight:bold;cursor:pointer;">Повторить</button>');
+                };
+                document.head.appendChild(script);
+            }
+
+            try {
+                const xhr = new XMLHttpRequest();
+                xhr.open('GET', OPENCV_URL, true);
+                xhr.responseType = 'text';
+
+                xhr.onprogress = function(e) {
+                    if (e.lengthComputable && e.total > 0) {
+                        const percent = Math.round((e.loaded / e.total) * 100);
+                        const mb = (e.loaded / (1024 * 1024)).toFixed(1);
+                        const totalMb = (e.total / (1024 * 1024)).toFixed(1);
+                        updateCvStatus(`⏳ Загрузка Wasm: ${percent}% (${mb}/${totalMb} МБ)`);
+                    } else {
+                        const mb = (e.loaded / (1024 * 1024)).toFixed(1);
+                        updateCvStatus(`⏳ Скачивание ядра: ${mb} МБ...`);
+                    }
+                };
+
+                xhr.onload = function() {
+                    if (xhr.status === 200 || xhr.status === 0) {
+                        updateCvStatus('⚙ Компиляция ядра Vision...');
+                        try {
+                            const script = document.createElement('script');
+                            script.type = 'text/javascript';
+                            script.text = xhr.responseText;
+                            document.head.appendChild(script);
+                        } catch (err) {
+                            console.error("Eval error, fallback to direct:", err);
+                            injectDirectScript();
+                        }
+                    } else {
+                        injectDirectScript();
+                    }
+                };
+
+                xhr.onerror = function() {
+                    injectDirectScript();
+                };
+
+                xhr.send();
+            } catch (e) {
+                injectDirectScript();
+            }
+        })();
     </script>
-    <script async src="https://docs.opencv.org/4.8.0/opencv.js" onload="if(window.onOpenCvReady) window.onOpenCvReady();" type="text/javascript"></script>
 
     <style>
         * {
@@ -648,13 +716,23 @@
         </div>
     </div>
 
-    <!-- Logic scripts -->
-    <script src="vision.js"></script>
-    <script src="app.js"></script>
+    <!-- Logic scripts with cache-busting -->
+    <script src="vision.js?v=8"></script>
+    <script src="app.js?v=8"></script>
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js').catch(err => console.log('SW fail:', err));
+                navigator.serviceWorker.register('sw.js?v=8').then(reg => {
+                    reg.onupdatefound = () => {
+                        const installingWorker = reg.installing;
+                        installingWorker.onstatechange = () => {
+                            if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                console.log('New update available, activating immediately...');
+                                window.location.reload();
+                            }
+                        };
+                    };
+                }).catch(err => console.log('SW fail:', err));
             });
         }
     </script>

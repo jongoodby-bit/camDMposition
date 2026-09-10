@@ -1,4 +1,4 @@
-const CACHE_NAME = 'camdatam-pwa-v7';
+const CACHE_NAME = 'camdatam-pwa-v8';
 const VENDOR_ASSETS = [
   'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js',
   'https://docs.opencv.org/4.8.0/opencv.js'
