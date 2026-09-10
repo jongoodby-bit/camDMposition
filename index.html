@@ -13,16 +13,17 @@
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icon-192.png">
 
-    <!-- Libraries: ZXing & Fast Edge-Cached OpenCV.js -->
+    <!-- Libraries: ZXing & Standalone Official OpenCV.js -->
     <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
     <script>
         var Module = {
             onRuntimeInitialized: function() {
+                console.log("OpenCV Wasm Runtime Initialized!");
                 if (window.onOpenCvReady) window.onOpenCvReady();
             }
         };
     </script>
-    <script src="https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.9.0-release.3/dist/opencv.js" onload="if(window.onOpenCvReady) window.onOpenCvReady();" type="text/javascript"></script>
+    <script async src="https://docs.opencv.org/4.8.0/opencv.js" onload="if(window.onOpenCvReady) window.onOpenCvReady();" type="text/javascript"></script>
 
     <style>
         * {
@@ -537,52 +538,35 @@
     <div id="settingsModal" class="modal-overlay">
         <div class="modal-content">
             <div class="modal-title">ПАРАМЕТРЫ СИСТЕМЫ</div>
-            <div class="slider-group">
-                <label class="slider-label">Размер подложки / рамки (мм):</label>
-                <select id="selFrameSize" style="width:100%; height:40px; background:#252834; color:#FFF; border-radius:8px; border:1px solid #444; padding:0 8px; font-size:14px;">
-                    <option value="5">5 мм</option>
-                    <option value="6">6 мм</option>
-                    <option value="7">7 мм</option>
-                    <option value="8">8 мм</option>
-                    <option value="9">9 мм</option>
-                    <option value="10">10 мм</option>
-                    <option value="11">11 мм</option>
-                    <option value="12">12 мм</option>
-                    <option value="13">13 мм</option>
-                    <option value="14">14 мм</option>
-                    <option value="15" selected>15 мм</option>
-                    <option value="16">16 мм</option>
-                    <option value="17">17 мм</option>
-                    <option value="18">18 мм</option>
-                    <option value="19">19 мм</option>
-                    <option value="20">20 мм</option>
-                    <option value="21">21 мм</option>
-                    <option value="22">22 мм</option>
-                    <option value="23">23 мм</option>
-                    <option value="24">24 мм</option>
-                    <option value="25">25 мм</option>
-                    <option value="26">26 мм</option>
-                    <option value="27">27 мм</option>
-                    <option value="28">28 мм</option>
-                    <option value="29">29 мм</option>
-                    <option value="30">30 мм</option>
-                    <option value="31">31 мм</option>
-                    <option value="32">32 мм</option>
-                    <option value="33">33 мм</option>
-                    <option value="34">34 мм</option>
-                    <option value="35">35 мм</option>
-                    <option value="36">36 мм</option>
-                    <option value="37">37 мм</option>
-                    <option value="38">38 мм</option>
-                    <option value="39">39 мм</option>
-                    <option value="40">40 мм</option>
-                    <option value="45">45 мм</option>
-                    <option value="50">50 мм</option>
-                </select>
+            
+            <div class="slider-group" style="background:#1E202C; padding:14px; border-radius:12px; border:1px solid #333; margin-bottom:14px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <span style="font-size:13px; color:#AAA; font-weight:600;">Размер подложки (10-30 мм):</span>
+                    <span id="lblFrameSize" style="font-size:18px; font-weight:bold; color:#00FF88;">15 мм</span>
+                </div>
+
+                <!-- Range Slider with Step 1 mm from 10 to 30 -->
+                <input type="range" id="rngFrameSize" min="10" max="30" step="1" value="15" style="width:100%; height:10px; accent-color:#00E676; margin:10px 0; cursor:pointer;">
+                
+                <div style="display:flex; justify-content:space-between; font-size:10px; color:#777; margin-bottom:10px;">
+                    <span>10 мм</span>
+                    <span>15 мм</span>
+                    <span>20 мм</span>
+                    <span>25 мм</span>
+                    <span>30 мм</span>
+                </div>
+
+                <!-- Stepper buttons (-1 mm / +1 mm) -->
+                <div style="display:flex; gap:10px;">
+                    <button id="btnFrameMinus" type="button" style="flex:1; height:40px; background:#2A2D3C; color:#00E5FF; border:1px solid #444; border-radius:8px; font-weight:bold; font-size:14px; cursor:pointer;">➖ 1 мм</button>
+                    <button id="btnFramePlus" type="button" style="flex:1; height:40px; background:#2A2D3C; color:#00E5FF; border:1px solid #444; border-radius:8px; font-weight:bold; font-size:14px; cursor:pointer;">➕ 1 мм</button>
+                </div>
             </div>
+
             <div class="modal-btn-row">
                 <button id="btnSaveSettings" class="modal-btn btn-apply">ПРИМЕНИТЬ</button>
             </div>
+            
             <div style="text-align:center; margin-top:14px; font-size:12px; color:#888;">
                 © Evgeniy Fatiev • <a href="https://t.me/root_f" target="_blank" rel="noopener" style="color:#00DDFF; text-decoration:none; font-weight:600;">t.me/root_f</a>
             </div>

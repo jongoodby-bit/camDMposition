@@ -35,7 +35,10 @@ const mCodeSize = document.getElementById('mCodeSize');
 const settingsModal = document.getElementById('settingsModal');
 const manualModal = document.getElementById('manualModal');
 const zoomModal = document.getElementById('zoomModal');
-const selFrameSize = document.getElementById('selFrameSize');
+const rngFrameSize = document.getElementById('rngFrameSize');
+const lblFrameSize = document.getElementById('lblFrameSize');
+const btnFrameMinus = document.getElementById('btnFrameMinus');
+const btnFramePlus = document.getElementById('btnFramePlus');
 const btnSaveSettings = document.getElementById('btnSaveSettings');
 const btnCloseZoom = document.getElementById('btnCloseZoom');
 const zoomStatusText = document.getElementById('zoomStatusText');
@@ -135,15 +138,15 @@ const cvTimer = setInterval(() => {
     }
 }, 50);
 
-// Timeout safety fallback (12s)
+// Timeout safety fallback (10s)
 setTimeout(() => {
     if (!isCvReady) {
-        const loadingText = document.querySelector('#cvLoading div:last-child');
-        if (loadingText) {
-            loadingText.innerHTML = '<span style="color:#FF5252">Сеть замедлена. Загрузка продолжается...</span><br><button onclick="location.reload()" style="margin-top:8px;padding:6px 14px;background:#00E5FF;border:none;border-radius:8px;font-weight:bold;color:#000;cursor:pointer;">Повторить</button>';
+        const loadingEl = document.getElementById('cvLoading');
+        if (loadingEl) {
+            loadingEl.innerHTML = '<span style="color:#FFB74D">Загрузка ядра...</span> <button onclick="location.reload()" style="margin-left:6px;padding:3px 8px;background:#00E5FF;border:none;border-radius:12px;font-weight:bold;color:#000;font-size:10px;cursor:pointer;">Обновить</button>';
         }
     }
-}, 12000);
+}, 10000);
 
 // 1. Camera Initialization
 async function initCamera() {
@@ -658,7 +661,9 @@ btnCapture.addEventListener('click', () => {
 btnLeft.addEventListener('click', () => {
     if (isCaptured) analyzeCurrentFrame();
     else {
-        selFrameSize.value = frameSizeMm.toString();
+        const curVal = Math.round(frameSizeMm);
+        if (rngFrameSize) rngFrameSize.value = curVal.toString();
+        if (lblFrameSize) lblFrameSize.innerText = `${curVal} мм`;
         settingsModal.style.display = 'flex';
     }
 });
@@ -734,8 +739,33 @@ btnCloseZoom.addEventListener('click', () => {
 });
 
 // Settings Modal
+if (rngFrameSize) {
+    rngFrameSize.addEventListener('input', () => {
+        const val = parseInt(rngFrameSize.value);
+        if (lblFrameSize) lblFrameSize.innerText = `${val} мм`;
+    });
+}
+if (btnFrameMinus) {
+    btnFrameMinus.addEventListener('click', () => {
+        let val = parseInt(rngFrameSize.value) - 1;
+        if (val < 10) val = 10;
+        rngFrameSize.value = val;
+        if (lblFrameSize) lblFrameSize.innerText = `${val} мм`;
+    });
+}
+if (btnFramePlus) {
+    btnFramePlus.addEventListener('click', () => {
+        let val = parseInt(rngFrameSize.value) + 1;
+        if (val > 30) val = 30;
+        rngFrameSize.value = val;
+        if (lblFrameSize) lblFrameSize.innerText = `${val} мм`;
+    });
+}
+
 btnSaveSettings.addEventListener('click', () => {
-    frameSizeMm = parseFloat(selFrameSize.value);
+    if (rngFrameSize) {
+        frameSizeMm = parseFloat(rngFrameSize.value);
+    }
     localStorage.setItem('frameSizeMm', frameSizeMm.toString());
     settingsModal.style.display = 'none';
     if (isCaptured) analyzeCurrentFrame();
